@@ -1,0 +1,4 @@
+platform_affiliation,rider_cancel_rate,driver_cancel_rate,completion_rate
+Uber,0.17,0.16,0.67
+Bolt,0.17,0.17,0.66
+Dual-Platform (Both),0.17,0.17,0.67
