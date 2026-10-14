@@ -49,19 +49,22 @@ def get_connection():
 # 2. PARSE THE .SQL FILE INTO (name, sql) PAIRS
 # ─────────────────────────────────────────────────────────────
 # Strategy: a comment line like  "-- 2.1.1. Which times..."  starts a new
-# query. We collect everything until the next such header or a semicolon.
+# query. Everything until the next numbered header is that query's SQL.
+# Bare comments inside a query body are kept as part of the SQL (Oracle
+# accepts `--` comments inline), so they never split a query.
 
-SECTION_RE = re.compile(r"^--\s*(\d+(?:\.\d+)+)\.?\s+(.*)$")
+# FIX 1: capture optional trailing letter suffix (2.3.5a, 2.3.5b, ...)
+SECTION_RE = re.compile(r"^--\s*(\d+(?:\.\d+)*[a-z]?)\.?\s+(.*)$", re.IGNORECASE)
 
 
 def parse_sql_file(path: str) -> List[Tuple[str, str]]:
     """
     Split queries_research.sql into (query_id, sql_text) tuples.
 
-    Splits on:
-      - Numbered headers: '-- 2.3.4. Question text'
-      - Bare sub-headers: '-- Child Safety Rating:'
-      - Fallback: any ';' followed by SELECT or WITH
+    A new query starts ONLY at a numbered header comment:
+        -- 2.3.5a. Are rider cancellations more sensitive to ...
+    All other `--` comments are preserved inside the SQL body so they
+    don't accidentally split or rename queries.
     """
     text = Path(path).read_text(encoding="utf-8-sig")
 
@@ -70,19 +73,19 @@ def parse_sql_file(path: str) -> List[Tuple[str, str]]:
                 .replace("\u2018", "'").replace("\u2019", "'")
                 .replace("\u201c", '"').replace("\u201d", '"'))
 
-    queries = []
-    current_id, current_desc = None, ""
-    buffer = []
-    sub_index = 0
+    queries: List[Tuple[str, str]] = []
+    current_id: str | None = None
+    current_desc: str = ""
+    buffer: List[str] = []
 
-    def clean_sql(raw):
+    def clean_sql(raw: str) -> str:
         sql = raw.strip()
         while sql.endswith(";"):
             sql = sql[:-1].rstrip()
         return sql
 
     def flush():
-        nonlocal buffer, current_id, current_desc, sub_index
+        nonlocal buffer, current_id, current_desc
         if not current_id or not buffer:
             buffer = []
             return
@@ -101,36 +104,24 @@ def parse_sql_file(path: str) -> List[Tuple[str, str]]:
             queries.append((qid, sql))
 
         buffer = []
-        sub_index = 0
+        # FIX 2: clear the id/desc so a stale id can't leak into the
+        # next query's name (this caused "2.3.4 2.3.5a ...").
+        current_id = None
+        current_desc = ""
 
     for line in text.splitlines():
         stripped = line.strip()
 
-        # Case A: numbered header like '-- 2.3.4. Question'
+        # Case A: numbered header like '-- 2.3.5a. Question text'
         m = SECTION_RE.match(stripped)
         if m:
             flush()
-            current_id, current_desc = m.group(1), m.group(2).strip()
+            current_id = m.group(1)
+            current_desc = m.group(2).strip()
             continue
 
-        # Case B: bare sub-header like '-- Child Safety Rating:'
-        if stripped.startswith("--"):
-            content = stripped.lstrip("-").strip().rstrip(":").strip()
-            if not content:
-                continue
-            lower = content.lower()
-            # Skip comments that are actually SQL keywords
-            if lower.startswith(("select", "from", "where", "join",
-                                 "and ", "or ", "group by", "order by",
-                                 "with ", "case ", "when ")):
-                continue
-            # Otherwise treat as sub-header
-            if current_id and buffer:
-                flush()
-                sub_index += 1
-            current_desc = content
-            continue
-
+        # Case B: any other comment line — keep it inside the buffer.
+        # FIX 3: no longer treat bare `--` comments as query boundaries.
         buffer.append(line)
 
     flush()
@@ -182,7 +173,7 @@ def main():
             print(f"   ✔ {len(df)} rows × {df.shape[1]} cols\n")
 
     # ── Persist results ──────────────────────────────────────
-    out_dir = Path("output")
+    out_dir = Path("data")
     out_dir.mkdir(exist_ok=True)
 
     # 1) One CSV per query — easy to open in Excel / load elsewhere
