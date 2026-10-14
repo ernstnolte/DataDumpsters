@@ -56,33 +56,81 @@ SECTION_RE = re.compile(r"^--\s*(\d+(?:\.\d+)+)\.?\s+(.*)$")
 
 def parse_sql_file(path: str) -> List[Tuple[str, str]]:
     """
-    Return a list of (query_id, sql_text) tuples.
-    query_id looks like "2.1.1" and sql_text is the full SELECT.
-    """
-    text = Path(path).read_text(encoding="utf-8")
-    queries: List[Tuple[str, str]] = []
+    Split queries_research.sql into (query_id, sql_text) tuples.
 
-    current_id: str | None = None
-    current_desc: str = ""
-    buffer: List[str] = []
+    Splits on:
+      - Numbered headers: '-- 2.3.4. Question text'
+      - Bare sub-headers: '-- Child Safety Rating:'
+      - Fallback: any ';' followed by SELECT or WITH
+    """
+    text = Path(path).read_text(encoding="utf-8-sig")
+
+    # Normalise invisible characters
+    text = (text.replace("\u00a0", " ").replace("\u200b", "")
+                .replace("\u2018", "'").replace("\u2019", "'")
+                .replace("\u201c", '"').replace("\u201d", '"'))
+
+    queries = []
+    current_id, current_desc = None, ""
+    buffer = []
+    sub_index = 0
+
+    def clean_sql(raw):
+        sql = raw.strip()
+        while sql.endswith(";"):
+            sql = sql[:-1].rstrip()
+        return sql
 
     def flush():
-        nonlocal buffer, current_id
-        if current_id and buffer:
-            sql = "\n".join(buffer).strip().rstrip(";").strip()
-            if sql:
-                queries.append((f"{current_id} {current_desc}".strip(), sql))
+        nonlocal buffer, current_id, current_desc, sub_index
+        if not current_id or not buffer:
+            buffer = []
+            return
+        raw = clean_sql("\n".join(buffer))
+
+        # Fallback: split on ';' followed by SELECT/WITH
+        parts = re.split(r";\s*(?=(?:SELECT|WITH)\b)",
+                         raw, flags=re.IGNORECASE)
+
+        for i, part in enumerate(parts):
+            sql = clean_sql(part)
+            if not sql:
+                continue
+            suffix = chr(ord("a") + i) if i > 0 else ""
+            qid = f"{current_id}{suffix} {current_desc}".strip()
+            queries.append((qid, sql))
+
         buffer = []
+        sub_index = 0
 
     for line in text.splitlines():
-        m = SECTION_RE.match(line.strip())
+        stripped = line.strip()
+
+        # Case A: numbered header like '-- 2.3.4. Question'
+        m = SECTION_RE.match(stripped)
         if m:
             flush()
             current_id, current_desc = m.group(1), m.group(2).strip()
             continue
-        # Skip standalone comment lines (but keep inline hints)
-        if line.strip().startswith("--"):
+
+        # Case B: bare sub-header like '-- Child Safety Rating:'
+        if stripped.startswith("--"):
+            content = stripped.lstrip("-").strip().rstrip(":").strip()
+            if not content:
+                continue
+            lower = content.lower()
+            # Skip comments that are actually SQL keywords
+            if lower.startswith(("select", "from", "where", "join",
+                                 "and ", "or ", "group by", "order by",
+                                 "with ", "case ", "when ")):
+                continue
+            # Otherwise treat as sub-header
+            if current_id and buffer:
+                flush()
+                sub_index += 1
+            current_desc = content
             continue
+
         buffer.append(line)
 
     flush()
@@ -102,6 +150,11 @@ def run_query(sql: str, conn) -> pd.DataFrame:
         return pd.DataFrame(rows, columns=cols)
     except oracledb.DatabaseError as e:
         print(f"   ⚠ Query failed: {e}")
+        print(f"   ── DEBUG: length = {len(sql)} chars ──")
+        print(f"   ── First 300 chars ──")
+        print(repr(sql[:300]))
+        print(f"   ── Last 300 chars ──")
+        print(repr(sql[-300:]))
         return pd.DataFrame()
 
 
