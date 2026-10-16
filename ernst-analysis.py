@@ -261,7 +261,6 @@ def q_7_2_3():
     df = df.sort_values("cancellation_count", ascending=False).reset_index(drop=True)
     counts = df["cancellation_count"].values.astype(float)
 
-    # Gini on cancellations per listed driver
     sorted_counts = np.sort(counts)
     n = len(sorted_counts)
     cumulative = np.cumsum(sorted_counts)
@@ -277,8 +276,10 @@ def q_7_2_3():
     log(f"   {'Highly concentrated' if top_10_share > 0.5 else 'Moderately concentrated'}"
         f" — {'targeted intervention sensible' if top_10_share > 0.5 else 'broad intervention may be needed'}")
 
-    # Chart: Lorenz curve + top 15 bar
-    fig, axes = plt.subplots(1, 2, figsize=(13, 6))
+    # ── Chart ──
+    # constrained_layout reserves enough horizontal space for the long
+    # driver names on the right panel, and places the suptitle cleanly.
+    fig, axes = plt.subplots(1, 2, figsize=(15, 7), constrained_layout=True)
 
     ax = axes[0]
     lorenz_x = np.linspace(0, 1, n + 1)
@@ -296,13 +297,17 @@ def q_7_2_3():
     names = (top15["first_name"].astype(str).str.strip() + " "
              + top15["last_name"].astype(str).str.strip())
     ax.barh(names, top15["cancellation_count"], color="#d85555")
+    # Move driver names to the right side so they never overlap the left panel
+    ax.yaxis.tick_right()
+    ax.yaxis.set_label_position("right")
     ax.set_xlabel("Number of cancellations")
     ax.set_ylabel("Driver")
     ax.set_title("Top 15 drivers by cancellation count")
+    # Give labels a little breathing room on the right
+    ax.tick_params(axis="y", pad=6)
 
-    fig.suptitle("Driver cancellation concentration", fontweight="bold", y=1.02)
+    fig.suptitle("Driver cancellation concentration", fontweight="bold")
     _save(fig, "7_2_3_drivers_above_avg")
-
 
 # ═════════════════════════════════════════════════════════════
 # Q 7.3.1 (2.2.1) — Safety Cancellations by Zone
@@ -398,8 +403,9 @@ def q_7_4_1():
             f"{zone_df['low_adult_safety_pct'].max():.2f}% "
             f"({zone_df.loc[zone_df['low_adult_safety_pct'].idxmax(), 'zone_name']})")
 
-    # Two-panel chart
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    # ── Chart ──
+    # Wider figure + constrained_layout for the long zone names.
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7), constrained_layout=True)
 
     if not dist_df.empty:
         ax = axes[0]
@@ -419,12 +425,16 @@ def q_7_4_1():
         top = zone_df.sort_values("low_adult_safety_pct",
                                   ascending=False).head(15).iloc[::-1]
         ax.barh(top["zone_name"], top["low_adult_safety_pct"], color="#d85555")
+        # Move the zone names to the right-hand side, away from the left panel
+        ax.yaxis.tick_right()
+        ax.yaxis.set_label_position("right")
         ax.set_xlabel("% of trips in vehicles with adult rating ≤ 2")
         ax.set_ylabel("City zone")
         ax.set_title("Zones with highest share of low-rated vehicles")
+        ax.tick_params(axis="y", pad=6)
 
     fig.suptitle("Vehicle safety — distribution and zonal concentration",
-                 fontweight="bold", y=1.02)
+                 fontweight="bold")
     _save(fig, "7_4_1_vehicle_safety_distribution")
 
 
