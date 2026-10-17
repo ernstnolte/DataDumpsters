@@ -24,7 +24,7 @@ oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_32")
 # ─────────────────────────────────────────────────────────────
 DB_CONFIG = {
     "user":         "ernst",
-    "password":     "",
+    "password":     "$uperUser2002",
     "host":         "localhost",
     "port":         1521,
     "service_name": "xe",       # or use "sid": "xe"
@@ -198,9 +198,9 @@ if __name__ == "__main__":
     results, arrays = main()
 
     # ── Example: peek at a specific result ──────────────────
-    key = next((k for k in results if k.startswith("2.1.1")), None)
-    if key:
-        print(f"\n=== {key} ===")
-        print(results[key])
-        print("\nAs NumPy array:")
-        print(arrays[key])
+    # key = next((k for k in results if k.startswith("2.1.1")), None)
+    # if key:
+    #     print(f"\n=== {key} ===")
+    #     print(results[key])
+    #     print("\nAs NumPy array:")
+    #     print(arrays[key])

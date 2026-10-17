@@ -1,6 +1,0 @@
-preferred_payment,total_requests,cancellations,cancellation_rate_pct
-CREDIT_CARD,10353,3511,33.91
-DEBIT_CARD,9863,3341,33.87
-EFT_OZOW,9704,3243,33.42
-IN_APP_WALLET,9575,3163,33.03
-CASH,10505,3411,32.47

@@ -1,7 +1,7 @@
 """
 visualize.py
 ------------
-Reads query result files produced by run_research.py (CSVs in ./output/)
+Reads query result files produced by run_research.py (CSVs in ./data/)
 and generates one chart per research question, saving them as PNGs in
 ./graphs/.
 
@@ -27,7 +27,7 @@ import numpy as np
 # ─────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────
-OUTPUT_DIR = Path("output")              # where run_research.py wrote CSVs
+data_DIR = Path("data")                  # where run_research.py wrote CSVs
 GRAPH_DIR  = Path("graphs")              # where to save PNGs
 GRAPH_DIR.mkdir(exist_ok=True)
 
@@ -48,11 +48,8 @@ plt.rcParams.update({
 
 # ─────────────────────────────────────────────────────────────
 # AXIS LABEL DICTIONARY
-# One source of truth for every axis title used in the charts.
-# Edit here to change a label everywhere it appears.
 # ─────────────────────────────────────────────────────────────
 LABELS = {
-    # shared column names
     "request_hour":                "Hour of day (24-hour clock)",
     "cancellation_rate_pct":       "Rider cancellation rate (% of requests)",
     "cancellations":               "Number of cancellations",
@@ -114,30 +111,27 @@ def _safe(df: pd.DataFrame, *cols) -> pd.DataFrame:
     return df
 
 
-def _ylabel(col: str) -> str:
-    """Look up a friendly label, fall back to a tidied column name."""
-    if col in LABELS:
-        return LABELS[col]
-    return col.replace("_", " ").capitalize()
-
-
-def _wrap_ticks(ax, axis: str = "y", width: int = 28):
+def _wrap_ticks(ax, axis: str = "y", width: int = 28, rotate: int = 30):
     """Wrap long tick labels so they don't squash the plot area."""
-    labels = ax.get_yticklabels() if axis == "y" else ax.get_xticklabels()
-    new = [textwrap.fill(t.get_text(), width) for t in labels]
     if axis == "y":
-        ax.set_yticklabels(new)
+        # Fix tick locations before relabelling to avoid UserWarning
+        ax.set_yticks(ax.get_yticks())
+        labels = ax.get_yticklabels()
+        ax.set_yticklabels([textwrap.fill(t.get_text(), width) for t in labels])
     else:
-        ax.set_xticklabels(new, rotation=30, ha="right")
+        # Pin x tick positions to the number of current labels
+        ax.set_xticks(range(len(ax.get_xticklabels())))
+        labels = ax.get_xticklabels()
+        ax.set_xticklabels(
+            [textwrap.fill(t.get_text(), width) for t in labels],
+            rotation=rotate,
+            ha="right",
+        )
 
 
 def _bar_labels(ax, fmt="{:.1f}", axis: str = "y", pad: int = 1):
-    """
-    Annotate each bar with its value.
-      axis='y' → value printed at end of a horizontal bar
-      axis='x' → value printed above a vertical bar
-    """
-    if axis == "y":  # horizontal bars: label at right edge
+    """Annotate each bar with its value."""
+    if axis == "y":
         for p in ax.patches:
             w = p.get_width()
             if w != w:  # NaN guard
@@ -146,7 +140,7 @@ def _bar_labels(ax, fmt="{:.1f}", axis: str = "y", pad: int = 1):
                         (w, p.get_y() + p.get_height() / 2),
                         xytext=(pad, 0), textcoords="offset points",
                         va="center", fontsize=8, color="#333")
-    else:            # vertical bars: label above
+    else:
         for p in ax.patches:
             h = p.get_height()
             if h != h:
@@ -157,16 +151,8 @@ def _bar_labels(ax, fmt="{:.1f}", axis: str = "y", pad: int = 1):
                         ha="center", fontsize=8, color="#333")
 
 
-def load_results(source: Path = OUTPUT_DIR) -> dict:
-    """
-    Load every CSV in `source` into a dict keyed by query ID.
-
-    Keys are reconstructed from filenames. run_research.py names files
-    by replacing non-word chars with '_', so e.g.:
-        "2_1_1_Which_times_during_the_day_are_riders_more_likely_to_cancel_a_ride.csv"
-    becomes key
-        "2_1_1_Which_times_during_the_day_are_riders_more_likely_to_cancel_a_ride"
-    """
+def load_results(source: Path = data_DIR) -> dict:
+    """Load every CSV in `source` into a dict keyed by query ID."""
     results = {}
     if not source.exists():
         raise FileNotFoundError(
@@ -176,7 +162,7 @@ def load_results(source: Path = OUTPUT_DIR) -> dict:
     for csv_file in sorted(source.glob("*.csv")):
         if csv_file.name.startswith("all_results"):
             continue
-        key = csv_file.stem                       # remove .csv
+        key = csv_file.stem
         try:
             df = pd.read_csv(csv_file)
             results[key] = df
@@ -188,13 +174,12 @@ def load_results(source: Path = OUTPUT_DIR) -> dict:
 def group_by_query_prefix(results: dict) -> dict:
     """
     Group result keys by their numeric query prefix, e.g.
-        {"2.1.1": ["2_1_1_Which_times...", ...], "2.3.5": [...]}
-
-    Handles both filename style ('2_1_1_...') and space style ('2.1.1 ...').
+        {"2.1.1": ["2_1_1_Which_times...", ...], "2.3.5a": ["2_3_5a_..."]}
     """
     by_prefix = {}
     for key in results:
-        m = re.match(r"^(\d+(?:[._]\d+)+)", key)
+        # Match digits, dots, and an optional trailing letter
+        m = re.match(r"^(\d+(?:[._]\d+)+[a-z]?)", key, re.IGNORECASE)
         if not m:
             continue
         prefix = m.group(1).replace("_", ".")
@@ -644,8 +629,8 @@ DISPATCH = [
     ("2.3.2", chart_2_3_2),
     ("2.3.3", chart_2_3_3),
     ("2.3.4", chart_2_3_4),
-    ("2.3.5", chart_2_3_5_adult),
-    ("2.3.5", chart_2_3_5_child),
+    ("2.3.5a", chart_2_3_5_adult),
+    ("2.3.5b", chart_2_3_5_child),
     ("2.4.1", chart_2_4_1),
     ("2.4.2", chart_2_4_2),
     ("2.4.4", chart_2_4_4),
@@ -667,7 +652,7 @@ def visualize_all(results: dict):
     by_prefix = group_by_query_prefix(results)
     if not by_prefix:
         print("   ⚠ No query files matched the expected 'X.Y.Z' naming pattern.")
-        print("   Check that ./output/ contains CSVs from run_research.py.")
+        print("   Check that ./data/ contains CSVs from run_research.py.")
         return
 
     for prefix, fn in DISPATCH:
@@ -679,8 +664,8 @@ def visualize_all(results: dict):
 
 
 if __name__ == "__main__":
-    print(f"→ Loading query results from ./{OUTPUT_DIR}/ ...")
-    results = load_results(OUTPUT_DIR)
+    print(f"→ Loading query results from ./{data_DIR}/ ...")
+    results = load_results(data_DIR)
     print(f"   ✔ Loaded {len(results)} result file(s)")
 
     visualize_all(results)
