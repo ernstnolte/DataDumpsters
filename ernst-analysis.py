@@ -84,7 +84,7 @@ def load_csv(prefix: str) -> pd.DataFrame:
     pattern = prefix.replace(".", "_")
     matches = sorted(DATA_DIR.glob(f"{pattern}*.csv"))
     if not matches:
-        log(f"   ⚠ No CSV found for prefix '{prefix}'")
+        log(f"   !! No CSV found for prefix '{prefix}'")
         return pd.DataFrame()
     return pd.read_csv(matches[0])
 

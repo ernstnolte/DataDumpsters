@@ -679,10 +679,10 @@ def visualize_all(results: dict):
 
 
 if __name__ == "__main__":
-    print(f"▶ Loading query results from ./{OUTPUT_DIR}/ ...")
+    print(f"→ Loading query results from ./{OUTPUT_DIR}/ ...")
     results = load_results(OUTPUT_DIR)
     print(f"   ✔ Loaded {len(results)} result file(s)")
 
     visualize_all(results)
 
-    print(f"\n✅ All charts saved to ./{GRAPH_DIR}/")
+    print(f"\n✔ All charts saved to ./{GRAPH_DIR}/")

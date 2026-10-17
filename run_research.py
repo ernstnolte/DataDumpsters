@@ -24,7 +24,7 @@ oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_32")
 # ─────────────────────────────────────────────────────────────
 DB_CONFIG = {
     "user":         "ernst",
-    "password":     "$uperUser2002",
+    "password":     "",
     "host":         "localhost",
     "port":         1521,
     "service_name": "xe",       # or use "sid": "xe"
